@@ -9,8 +9,12 @@ data_list = [[0]]
 username = ''
 password = ''
 win_loss = ''
+# the next two variables show the user is
+# playing smart or predictable
+suspicion = False
+predictable = True
 ai_data = {'list': {'r': 0, 'p': 0, 's': 0}, 'majority': None, 'lose_r': None, 'lose_p': None, 'lose_s': None,
-           'after_draw': None}
+           'after_draw': None, 'win_r': None, 'win_p': None, 'win_s': None}
 ai_count = 0
 rps_list = ['rock', 'paper', 'scissors']
 db = sql.connect('./my_data.db')
@@ -33,16 +37,20 @@ def insert_account(insert_username, insert_pass):
 
 
 def insert_data(username_field, games_played_field):
-    cursor.execute("INSERT INTO rps_data (username, games_played, other_data) VALUES (?, ?, ?)",
-                   (username_field, games_played_field, str([])))
+    cursor.execute("INSERT INTO rps_data VALUES (?, ?, ?)", (username_field, games_played_field, '[]'))
 
 
 def ai_function(all_data):
     global ai_data
+    for my_rps in ai_data['list']:
+        ai_data['list'][my_rps] = 0
     draws_dict = {'r': 0, 'p': 0, 's': 0}
     losses_dict_r = {'r': 0, 'p': 0, 's': 0}
     losses_dict_p = {'r': 0, 'p': 0, 's': 0}
     losses_dict_s = {'r': 0, 'p': 0, 's': 0}
+    wins_dict_r = {'r': 0, 'p': 0, 's': 0}
+    wins_dict_p = {'r': 0, 'p': 0, 's': 0}
+    wins_dict_s = {'r': 0, 'p': 0, 's': 0}
     for data_thing in range(0, len(all_data)):
         ai_data['list'][all_data[data_thing][0]] += 1
         # get all the users plays
@@ -56,12 +64,21 @@ def ai_function(all_data):
                     losses_dict_p[all_data[data_thing + 1][0]] += 1
                 else:
                     losses_dict_s[all_data[data_thing + 1][0]] += 1
+            else:
+                if all_data[data_thing][0] == 'r':
+                    wins_dict_r[all_data[data_thing + 1][0]] += 1
+                elif all_data[data_thing][0] == 'p':
+                    wins_dict_p[all_data[data_thing + 1][0]] += 1
+                else:
+                    wins_dict_s[all_data[data_thing + 1][0]] += 1
+    ai_data['win_r'] = sorted(wins_dict_r, key=wins_dict_r.__getitem__, reverse=True)[0]
+    ai_data['win_p'] = sorted(wins_dict_p, key=wins_dict_p.__getitem__, reverse=True)[0]
+    ai_data['win_s'] = sorted(wins_dict_s, key=wins_dict_s.__getitem__, reverse=True)[0]
     ai_data['lose_r'] = sorted(losses_dict_r, key=losses_dict_r.__getitem__, reverse=True)[0]
     ai_data['lose_p'] = sorted(losses_dict_p, key=losses_dict_p.__getitem__, reverse=True)[0]
     ai_data['lose_s'] = sorted(losses_dict_s, key=losses_dict_s.__getitem__, reverse=True)[0]
     ai_data['after_draw'] = sorted(draws_dict, key=draws_dict.__getitem__, reverse=True)[0]
     ai_data['majority'] = sorted(ai_data['list'], key=ai_data['list'].__getitem__, reverse=True)[0]
-    # print ai_data
 
 
 def opposite_rps(rps):
@@ -72,6 +89,35 @@ def opposite_rps(rps):
         return 'scissors'
     else:
         return 'rock'
+
+
+def print_data(which_data):
+    loss_num = 0
+    win_num = 0
+    draw_num = 0
+    if len(which_data) < 1:
+        return "Not enough data to print."
+    for data_thing in range(0, len(which_data)):
+        if which_data[data_thing][2] == 'w':
+            loss_num += 1
+        elif which_data[data_thing][2] == 'l':
+            win_num += 1
+        else:
+            draw_num += 1
+    percentage_num = 100 * (float(win_num) / (win_num + loss_num))
+    return "All previous data (draws amount to 0 in total percentage...): \n Total draws: " + \
+        str(draw_num) + "\n Total wins: " + str(win_num) + "\n Total losses: " + str(loss_num) + \
+        "\n Total percentage: " + str(win_num) + " / " + str(win_num + loss_num) + " (" + \
+           str(round(percentage_num, 2)) + "%)"
+
+
+def letter_to_word(letter):
+    if letter == 'r':
+        return 'rock'
+    elif letter == 'p':
+        return 'paper'
+    else:
+        return 'scissors'
 
 
 def who_wins(user, computer):
@@ -93,10 +139,10 @@ def who_wins(user, computer):
         return "User wins with " + user
 while True:
     played = raw_input("You have played this program before? True or False: ")
-    if played == "True":
+    if played == "True" or played == "t" or played == "T" or played == "true":
         played = True
         break
-    elif played == "False":
+    elif played == "False" or played == "f" or played == "F" or played == "false":
         played = False
         break
 if not played:
@@ -127,6 +173,7 @@ print "Welcome:  %s" % username
 while True:
     if count == 0:
         print("Whenever prompted, you may type 'quit' to exit the game...")
+        print("You may also type 'info' to see all your past plays")
         print("Otherwise, type 'r' for rock, 's' for scissors, or 'p' for paper.")
         computer_turn = rps_list[randint(0, 2)]
     else:
@@ -135,8 +182,24 @@ while True:
         else:
             if ai_count % 5 == 0:
                 ai_function(data_list[1])
+            if data_list[1][-1][2] and data_list[1][-2][2] and data_list[1][-3][2] == 'l':
+                if suspicion:
+                    predictable = False
+                else:
+                    suspicion = True
             if data_list[1][-1][2] == 'l':
-                computer_turn = opposite_rps(data_list[1][-1][0])
+                if data_list[1][-1][0] == 'r':
+                    computer_turn = opposite_rps(ai_data['win_r'])
+                    if ai_data['win_r'] == '':
+                        computer_turn = opposite_rps(data_list[1][-1][0])
+                elif data_list[1][-1][0] == 'p':
+                    computer_turn = opposite_rps(ai_data['win_p'])
+                    if ai_data['win_p'] == '':
+                        computer_turn = opposite_rps(data_list[1][-1][0])
+                else:
+                    computer_turn = opposite_rps(ai_data['win_s'])
+                    if ai_data['win_s'] == '':
+                        computer_turn = opposite_rps(data_list[1][-1][0])
             elif data_list[1][-1][2] == 'd':
                 computer_turn = opposite_rps(ai_data['after_draw'])
             else:
@@ -157,8 +220,11 @@ while True:
         user_turn = raw_input("Rock, Paper, Scissors... Shoot!  ")
         if user_turn == 'r' or user_turn == 'p' or user_turn == 's' or user_turn == 'quit':
             break
+        elif user_turn == 'info':
+            print(print_data(data_list[1]))
+            print("")
         else:
-            print("Please type one of the options or 'quit'...")
+            print("Please type one of the options or 'quit' or 'info'...")
     if user_turn == 'quit':
         break
     if user_turn == 'r':
